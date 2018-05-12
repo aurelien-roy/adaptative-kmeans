@@ -1,0 +1,457 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+#### Projet SY09
+#### Aurélien Roy, Aiman Zaki
+
+# Cuisine
+## Analyse exploratoire
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+setwd('/Users/aurelien/Google Drive/Projet SY09')
+
+COLORS <- c("red", "blue", "green", "gold", "grey")
+SHAPES <- c(4, 1, 2, 0, 5)
+R <- read.csv('data/recettes-pays.data', row.names = 1)
+```
+
+
+Ce diagramme en boîte suivant permet de visualiser l'importance générale de chaque ingrédient.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+par(cex.axis=0.7)
+par(las=2)
+boxplot(R, cew=2)
+
+cor0 <- cor(R, method = "pearson")
+cor1 <- cor0
+# On garde uniquement la partie triangulaire supérieure
+cor0[lower.tri(cor0, diag=TRUE)] <- NA 
+
+# Conversion en tableau
+cor0 <- na.omit(as.data.frame(as.table(cor0), col.names=))
+colnames(cor0) <- c("Ingredient 1", "Ingredient 2", "Pearson cor. factor")
+
+# Tri par valeur absolu du coeff. de corrélation
+cor0 <- cor0[order(-abs(cor0$"Pearson cor. factor")),]
+
+```
+
+On remarque que les ingrédients les plus courants, à gauche, dont les bornes supérieures sont plus élvées, sont principalements des sauces ou des épices.
+
+Ces ingrédients se retrouvent dans un grand nombre de plats.
+
+Nous pouvons aussi étudier les corrélations entre ingrédients. Deux ingrédients fortement corrélés positivement vont avoir tendance à avoir une répartition géographique semblable.
+
+### Les 10 couples d'ingrédients les plus correlés
+```{r echo=FALSE}
+# Les 10 couples d'ingrédients les plus correlés
+cor0[1:10,]
+```
+
+### Les 10 couples d'ingrédients les moins correlés
+```{r echo=FALSE}
+# Les 10 couples d'ingrédients les plus correlés
+cor0[(nrow(cor0)-9):nrow(cor0),]
+```
+
+## Analyse en composantes principales
+
+On réalise ensuite une analyse en composantes principales. La fonction princomp ne peut être utilisée, car nous avons plus de variables que d'individus. En revanche, la fonction prcomp, gère très bien ce cas.
+
+### Inertie des axes
+
+On remarque que 90% de l'intertie est expliqué par les 6 premiers axes. Sur le plan, on obtient la réprésentation suivante (seuls les axes ayant les plus grandes longueurs sont conservés).
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+PRC <- prcomp(R, center=TRUE, scale = FALSE)
+PC <- PRC$x
+
+valeurs_propres <- (1-1/nrow(R))*(PRC$sdev**2)
+
+cumsum(valeurs_propres / sum(valeurs_propres))
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+PRC$rotation <- PRC$rotation[(PRC$rotation[,1]**2+PRC$rotation[,2]**2)>0.03,]
+biplot(PRC, cex=0.5)
+```
+
+L'analyse en composante principales nous apprend que certaines cuisines peuvent être rapprochées ensemble (par exemples, toutes les cuisines asiatiques).
+
+Il est difficile de faire une interprétation du premier axe principal.
+
+En revanche, en prenant la combinaison des deux premiers axes, on observe une série d'axes diagonaux (sauce soja, gingembre, riz) pointant vers toutes les cuisines asiatiques. De la même manière, la seconde composante principale, étudiée seule, semble coder l'aspect plus ou moins tropical/méditaranéen des pays d'origine des recettes
+
+Ainsi, on retrouve une série d'axes pointant dans la même direction (huile d'holive, tomate, oignon), que l'on retrouve beaucoup dans la cuisine méditéranéenne.
+
+
+\newpage
+
+## Classification ascendante hiérarchique
+
+```{r, fig.height = 5}
+# Calcul de la distance de Manhattan
+d_manhattan <- dist(R, method="manhattan")
+
+# Classifcation hiérarchique avec le critère de distance moyenne
+plot(hclust(d_manhattan, method="average"))
+```
+
+\newpage
+
+
+## Méthode des K-Means
+
+
+```{r}
+L <- function(D) lapply(1:100, function(t) kmeans(R, centers=D, nstart=1))
+wtot <- function(D) min(sapply(L(D), function(l) l$tot.withins))
+plot(1:8, sapply(1:8, wtot), ylab="Intertie intra-classes", xlab="Valeur de K")
+```
+
+En observant la décroissance des interties intra-classes avec l'augmentation
+du nombre de classes ; la méthode du coude revèle un changement de pente autour
+de k = 4.
+
+On choisit donc d'utiliser 4 classes :
+
+```{r echo=FALSE}
+km3 <- kmeans(R, centers = 4)
+plot(PC[,1], PC[,2], col=c('red', 'blue', 'green', 'gold')[km3$cluster])
+text(PC[,c(1,2)], row.names(PC), cex=0.6, pos=3)
+```
+
+La méthode des K-Means révèle quatre groupes :
+D'abord la quasi-totalité des cuisines asiatiques ont bien été regroupées (thaïlandaise, vietnamienne, japonaise, chinoise...). Seule l'Inde a été placé dans un autre groupe.
+
+Le second cluster contient un certain nombre de cuisines méditéranéenne (Italie, Grèce, Maroc, Espagne, Portugal).
+
+Le troixième cluster rassemble les cuisines d'Amérique latine (la cuisine mexicaine et la cuisine créole), ainsi que l'Inde qui semble faire figure d'intrus du point de vue géographique.
+
+Enfin dans le dernier cluster, on retrouve toute la cuisine occidentale", constituée de l'Europe (sauf Europe du Sud) et de l'Amérique du Nord.
+
+Globalement, on retrouve quand même beaucoup d'associations reflétant une proximité géographique mais cette ressemblance n'est pas parfaite.
+
+On fait le même constat dans la classification hiérarchique ; à quelques exceptions près (ex : France et Amérique) ; les associations faîtes dans le bas de la hirarchie reflètent des proximités géographiques.
+
+
+\newpage
+
+### Analyse du jeu de données Recettes Echant
+
+
+```{r include=FALSE}
+
+```
+```{r message=FALSE, warning=FALSE}
+R_echant <- read.csv('./data/recettes-echant.data')
+```
+
+Le jeu de données est une liste de 2000 recettes pour lesquelles on dispose de la présence ou non de 51 ingrédients ainsi que son origine géographique.
+
+Pour transformer le jeu de données en tableau d'individus-variables sur les ingrédients, on applique simplement la transposée, et on retire la colonne origine.
+
+```{r message=FALSE, warning=FALSE}
+R2 <- t(as.matrix(R_echant[, -1]))
+```
+
+### Matrice de dissimilarité
+
+Comme notre jeu de données est exclusivement binaire, la distance binaire paraît bien adaptée.
+
+```{r message=FALSE, warning=FALSE, fig.height = 5}
+R2_dist <- dist(R2, method="binary")
+plot(hclust(R2_dist))
+```
+
+On observe la présence de six groupes. Toutefois, nous n'observons pas de cohérence dans la séparation proposée.
+
+### Algorithme des K-médoïdes
+
+```{r message=FALSE, warning=FALSE}
+library(cluster)
+medoids <- pam(R2_dist, k = 6)
+print(medoids$medoids)
+```
+
+\newpage
+
+# Classification par K-Means avec distance adaptative
+
+## Programmation
+
+Ci-dessous, une implémentation en R de l'algorithme des K-Means avec une distance adaptative.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+setwd('/Users/aurelien/Google Drive/Projet SY09/')
+source(file = "./fonctions/distXY.R")
+```
+```{r message=FALSE, warning=FALSE}
+kmeans_adpt <- function(X, K, n_iter = 100, n_ess = 10, precision = 1e-5){
+  X = as.matrix(X)
+  n = nrow(X)
+  p = ncol(X)
+  J = Inf
+  
+  ro = rep(1, K) # On définit chaque ro_k à 1
+  seq_1_K = as.array(seq(K)) # [1, 2, ..., K]
+  
+  for(e in 1:n_ess){
+    tryCatch({
+      
+      # Initialisation des K matrices Vk.
+      V_k = sweep(replicate(K, diag(p)), 3, ro**(1-p), "*")
+      centers = as.matrix(X[sample(n, K),,drop=FALSE])
+      
+      conv = Inf
+      i = 0
+
+        while(i < n_iter && conv > precision){
+          # Calcul des distances des individus à chaque centre
+          distances = apply(seq_1_K, 1, function(k) distXY(X, centers[k,], solve(V_k[,,k])))
+          
+          # Calcul du cluster le plus proche pour chaque individu
+          clusters = max.col(-distances) # eqv. à apply(which.min())
+          
+          prev_centers = centers
+          # Pour chaque cluster...
+          for(k in 1:K){
+            
+            elements = X[clusters == k,, drop=FALSE]
+            n_k = nrow(elements)
+            
+            # Calcul du nouveau centre
+            centers[k,] = apply(elements, 2, mean)
+            
+            # Calcul du Vk associé
+            V_k[,,k] = cov(elements) * (n_k-1) / n_k
+            
+            # Normalisation de Vk
+            V_k[,,k] = (ro[k] * det(V_k[,,k]))**(-1/p) * V_k[,,k]
+          }
+          
+          # Calcul de la convergence
+          conv = sum(apply(centers-prev_centers, 1, function(x) { sqrt(sum(x**2)) }))
+  
+          i = i + 1
+        }
+      
+        candidate_J <- sum(apply(seq_1_K, 1, function(k){
+          sum(distXY(X[clusters == k,, drop=FALSE], centers[k,], V_k[,,k]))
+        }))
+          
+        if(candidate_J < J){
+          opt_Vk = V_k
+          opt_clusters = clusters
+          opt_centers = centers
+            
+          J = candidate_J
+        }
+      
+      }, error = function(e){ })
+      
+  }
+    return (list("cluster" = opt_clusters, "centers" = opt_centers, "vk" = opt_Vk, "tot.distances" = J))
+}
+```
+
+L'algorithme retourne la partition, les centres des classes, les K matrices Vk ainsi que le critère J optimal, égal à la somme des distances des points à leur centre.
+
+Remarquons la présence d'une clause tryCatch au début du corps de la boucle des essais. Nous avons rencontré un problème lors de certaines éxécutions de l'algorithme au niveau du calcul du déterminant des matrices de covariances des classes.
+
+Bien que cela soit en théorie impossible, il arrivait que l'on obtienne des déterminants extrêmement petits négatifs. Le déterminant d'une matrice de covariance ne devrait jamais être négatif, et cette erreur est dû aux limitations des microprocesseurs quant aux calculs avec des valeurs à virgule flottante.
+
+Pour contourner ce problème, on fait en sorte que lorsque la fonction distXY lance une erreur, celle-ci soit rattrapée par l'instruction tryCatch et qu'on passe à l'essai suivant. Il est probable que cette erreur ne réapparaisse pas à l'essai suivant dû à une configuration initiale différente. Nous sommes conscients que cette solution relève de la "bidouille", mais nous n'avons rien trouvé de mieux.
+
+Pour comparer les deux algorithmes, nous avons crée la fonction compare_kmeans, qui lance l'algorithme K_Means standard le même nombre de fois qu'il y a d'essais dans notre algorithme adaptatif (afin qu'on puisse se faire une opignon non biaisée).
+
+Aussi, la fonction tente de faire un semblant d'association des clusters retournés par les deux fonctions, afin que deux clusters semblables sur les partitions des deux algorithmes soient affichés de la même couleur. La fonction prend également en paramètre l'étiquetage des données et utilise la forme des points (croix, cercles, ...) pour représenter la vraie classe de chaque individu.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+
+std_kmeans <- function(X, K, n_ess){
+  
+  stdt_km = NULL
+  
+  for(i in 1:n_ess){
+    km <- kmeans(X, centers = K)
+    if(is.null(stdt_km) || km$tot.withinss < stdt_km$tot.withinss){
+      stdt_km <- km
+    }
+  }
+  
+  return (stdt_km)
+}
+
+compare_kmeans <- function(X, Z, K, n_ess = 20, plot_std=TRUE, plot_adp=TRUE, log_scale=FALSE){
+  library(mclust)
+  
+  stdt_km <- std_kmeans(X, K, n_ess)
+  adpt_km <- kmeans_adpt(X, K, n_iter = 50, n_ess = n_ess)
+
+  colors_1 <- COLORS
+  colors_2 <- colors_1
+
+  c1 <- stdt_km$centers
+  c2 <- adpt_km$centers
+  for(i in 1:K){
+      closest = max.col(-t(apply(sweep(c2, 2, c1[i,]), 1, function(x) sum(x**2))))
+      colors_2[i] = colors_1[closest]
+      c2[closest,] = -Inf
+  }
+  
+  if(ncol(X) > 2){
+    X <- princomp(X)$scores
+  }
+
+  if(plot_std && plot_adp){
+    par(mfrow=c(1,2))
+  }
+  
+  scale = ""
+  if(log_scale){
+    scale = "xy"
+  }
+  
+  if(plot_std){
+    plot(X[,1], X[,2], col=colors_1[stdt_km$cluster], pch=SHAPES[Z], main="Standard K-Means", xlab="", ylab="", log=scale)
+  }
+  
+  if(plot_adp){
+    plot(X[,1], X[,2], col=colors_2[adpt_km$cluster], pch=SHAPES[Z], main="Adaptative K-Means", xlab="", ylab="", log=scale)
+  }
+
+  print(paste0("Standard K-Means : ", adjustedRandIndex(stdt_km$cluster, Z)))
+  print(paste0("Adaptive K-Means : ", adjustedRandIndex(adpt_km$cluster, Z)))
+  
+  return(list("std" = stdt_km, "adp" = adpt_km))
+}
+
+```
+
+## Applications
+
+### Synth1
+
+```{r message=FALSE, warning=FALSE}
+
+S <- read.csv('./data/Synth1.csv', header = T, row.names = 1)
+X <- S[, -3]
+Z <- S[, 3]
+
+km <- compare_kmeans(X, Z, K=2)
+```
+
+Sur ce premier jeu de données, les deux classes sont nettement séparées. Si bien, que les deux algorithmes performent tous les deux très bien.
+
+\newpage
+### Synth2
+
+```{r message=FALSE, warning=FALSE}
+S <- read.csv('./data/Synth2.csv', header = T, row.names = 1)
+X <- S[, -3]
+Z <- S[, 3]
+
+km <- compare_kmeans(X, Z, K=2)
+```
+
+Sur ce second jeu de données, la séparation sur le plan est moins marquée. L'algorithme K-Means classique a tendance à inclure à tort dans la classe condensée, des points éloignés du centre de la classe allongée. L'algorithme adaptatif propose un meilleur équilibre, les classes proposées semblent un peu plus compactes : on perçoit l'inffluence de la covariance dans le calcul des distances aux centres.
+
+\newpage
+
+### Synth3
+
+```{r message=FALSE, warning=FALSE}
+S <- read.csv('./data/Synth3.csv', header = T, row.names = 1)
+X <- S[, -3]
+Z <- S[, 3]
+
+km <- compare_kmeans(X, Z, K=2)
+```
+
+Ici, les deux classes paraissent confondues, mais qu'il y a une différence de densité perceptible (c'est à dire la présence une zone où un grand nombre de points sont concentrés), l'algorithme adaptatif obtient un score bien meilleur que l'algorithme standard.
+
+\newpage
+
+### Données iris
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+data(iris)
+X_iris <- iris[, 1:4]
+Z_iris <- iris[,5]
+
+std_scores = c()
+adp_scores = c()
+
+for(i in 1:5){
+  cl <- compare_kmeans(X_iris, Z_iris, K=i, plot_std=FALSE, plot_adp=FALSE)
+  std_scores[i] = cl$std$tot.withins
+  adp_scores[i] = cl$adp$tot.distances
+}
+```
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+par(mfrow=c(1,2))
+plot(std_scores, main="Critères K-Means std. selon K", ylab="Intertie intra-classes totale", xlab="Nombre de clusters")
+lines(std_scores)
+
+plot(adp_scores, main="Critères K-Means adp. selon K", ylab="Somme des distances aux centres", xlab="Nombre de clusters")
+lines(adp_scores)
+
+```
+
+En utilisant la méthode du coude, on conclut que le nombre optimal de clusters pour l'algorithme standard se situe entre 2 et 3. Pour l'algorithme K-Means adaptatif, la partition optimale est nettement obtenue pour K = 2 clusters.
+
+```{r message=FALSE, warning=FALSE}
+km <- compare_kmeans(X_iris, Z_iris, K=2)
+```
+
+Sur une classification à K = 2, l'algorithme adaptatif reconnaît parfaitement l'une des classes réelles du jeu de données (la classe de gauche).
+
+Cette classe est mal délimitée par l'algoirthme standard des K-Means, du fait que certains points de classe de droite sont plus proche du centre de la classe de gauche
+
+
+```{r message=FALSE, warning=FALSE}
+km <- compare_kmeans(X_iris, Z_iris, K=3)
+```
+
+Dès qu'on passe à K = 3, l'algorithme des K-Means délimite correctement la classe de gauche, du fait du repositionnement des autres centres. En revanche, l'algorithme adaptatif s'en sort toujours mieux pour séparer les deux classes de droites qui semblent assez confondues sur le plan.
+
+### Données Spam
+
+
+```{r message=FALSE, warning=FALSE}
+Spam <- read.csv("./data/spam.csv", header=T, row.names=1)
+X_spam <- Spam[,-58]
+Z_spam <- Spam[,58]
+
+X_PC <- princomp(X_spam)$scores
+km <- std_kmeans(X_spam, K=2, n_ess=10)
+plot(X_PC[, 1], X_PC[, 2], col=c("red", "blue")[km$cluster], pch=c(1, 2), xlab="", ylab="", main="Spam with standard K-Means", log="xy")
+```
+
+Remarquons d'abord que l'algorithme des K-Means standard gère très mal ce jeu de données. Cela peut s'expliquer par l'éventuelle confusion des deux classes (bien qu'il soit difficile de la visualiser compte tenu du nombre de dimensions) mais surtout par la présence de points très éloignés.
+
+Il s'agit peut-être de points aberrants, mais ne connaissant pas la nature des données ni le protocole qui a permis des les obtenir, nous ne pouvons en être sûr. Ainsi, nous n'allons pas retirer ces points éloignés.
+Notons que les graphiques de cette partie utilisent une échelle logarithmique.
+
+```{r message=FALSE, warning=FALSE}
+km <- compare_kmeans(X_PC[, 1:3], Z_spam, K=2, plot_std=FALSE, log_scale = TRUE)
+```
+
+L'application directe de l'algorithme des K-Means adaptatifs ne fonctionne pas, en raison du trop grand nombre de dimensions qui conduit à un manque de précision dans les calculs (obtention de déterminants négatifs pour des matrices de covariance).
+Néanmoins, en réalisant une ACP, on remarque que 96% de l'information peut être représenté par 3 dimensions.
+
+```{r message=FALSE, warning=FALSE}
+km <- compare_kmeans(X_PC[, 1:50], Z_spam, K=2, plot_std=FALSE, log_scale = TRUE)
+```
+
+Les résultats ne sont pas convaincants. Nous retentons avec cette fois-ci en conservant les 50 premiers axes principaux, ce qui donne un résultat passable.
+
+# Justification
+
+Les pages suivantes traitent la justification.
+
