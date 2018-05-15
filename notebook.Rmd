@@ -40,7 +40,7 @@ cor0 <- cor0[order(-abs(cor0$"Pearson cor. factor")),]
 
 ```
 
-On remarque que les ingrédients les plus courants, à gauche, dont les bornes supérieures sont plus élvées, sont principalements des sauces ou des épices.
+On remarque que les ingrédients les plus courants, à gauche, dont les bornes supérieures sont plus élevées, sont principalements des sauces ou des épices.
 
 Ces ingrédients se retrouvent dans un grand nombre de plats.
 
